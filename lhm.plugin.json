@@ -1,0 +1,151 @@
+{
+  "author": "flovoice53-tech",
+  "authorUrl": "https://github.com/flovoice53-tech",
+  "description": "MCP server that gives an AI agent a disposable email address and a real UK phone number so it can test a signup/verification flow end to end.",
+  "homepage": "https://github.com/flovoice53-tech/agent-identity-mcp",
+  "identifier": "flovoice53-tech-agent-identity-mcp",
+  "name": "agent-identity-mcp",
+  "prompts": [],
+  "resources": [],
+  "tags": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "disposable-email",
+    "temp-email",
+    "sms",
+    "otp",
+    "otp-testing",
+    "test-automation",
+    "qa-testing",
+    "ai-agent",
+    "claude",
+    "claude-code",
+    "cursor"
+  ],
+  "tools": [
+    {
+      "name": "create_test_email",
+      "title": "Create a disposable test email address",
+      "description": "Get a fresh, real email address that can receive mail for a short time — use it to sign up for something you're testing, then call get_test_email_messages to read what arrives.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ttlMinutes": {
+            "default": 15,
+            "description": "How long the address stays valid, in minutes (max 60).",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 60
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_test_email_messages",
+      "title": "Read messages for a test email address",
+      "description": "Get the messages received so far on an address created with create_test_email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "The address returned by create_test_email."
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_services",
+      "title": "List phone-verification services",
+      "description": "List the services a real UK phone number can be rented for (WhatsApp, Telegram, Google, Discord, etc.), with prices.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "rent_test_phone_number",
+      "title": "Rent a real test phone number",
+      "description": "Rent a real UK phone number for a given service so it can receive an SMS/OTP verification code. Debits the account balance. Returns a rentalId to check with wait_for_test_sms.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serviceSlug": {
+            "type": "string",
+            "description": "Service slug from list_services, e.g. \"whatsapp\", \"google\", \"discord\"."
+          },
+          "period": {
+            "default": "instant",
+            "description": "instant = one-time rental for a single code; monthly = keep the number for a month.",
+            "type": "string",
+            "enum": [
+              "instant",
+              "monthly"
+            ]
+          }
+        },
+        "required": [
+          "serviceSlug"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "wait_for_test_sms",
+      "title": "Wait for the SMS/OTP code",
+      "description": "Block until the first SMS/OTP code arrives on a phone rental, or time out.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rentalId": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The rentalId returned by rent_test_phone_number."
+          },
+          "timeoutMs": {
+            "default": 120000,
+            "description": "Max time to wait, in ms.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "intervalMs": {
+            "default": 3000,
+            "description": "Poll interval, in ms.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "rentalId"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ],
+  "version": "0.1.0"
+}
