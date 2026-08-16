@@ -6,9 +6,9 @@ Bundles two existing services:
 - [receivemail.dev](https://receivemail.dev) for the email side.
 - [sms-florin](https://flo-voice1.com) for the phone/SMS side.
 
-## Status: working, not yet published to npm/registries
+## Status: published on npm and the official MCP registry
 
-`create_test_email` no longer needs any receivemail.dev credential — mailbox creation is public/self-serve (rate-limited: 20/min per IP, 5,000/day total). The only credential needed is your own `SMS_FLORIN_API_KEY`, for the phone-number tools. Publishing itself (npm, MCP registries) is a separate step not yet done.
+`create_test_email` no longer needs any receivemail.dev credential — mailbox creation is public/self-serve (rate-limited: 20/min per IP, 5,000/day total). The only credential needed is your own `SMS_FLORIN_API_KEY`, for the phone-number tools.
 
 ## Setup
 
@@ -16,8 +16,8 @@ Bundles two existing services:
 {
   "mcpServers": {
     "agent-identity": {
-      "command": "node",
-      "args": ["/Users/florin/Documents/sms-florin/agent-identity-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "agent-identity-mcp"],
       "env": {
         "SMS_FLORIN_API_KEY": "your_key_here"
       }
