@@ -1,0 +1,37 @@
+{
+  "manifest_version": "0.2",
+  "name": "agent-identity-mcp",
+  "version": "0.1.1",
+  "description": "MCP server that gives an AI agent a disposable email address and a real UK phone number so it can test a signup/verification flow end to end.",
+  "author": {
+    "name": "sms-florin"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {
+        "SMS_FLORIN_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "sms-florin API Key",
+      "description": "Get one at https://flo-voice1.com/api-access",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flovoice53-tech/agent-identity-mcp"
+  },
+  "homepage": "https://github.com/flovoice53-tech/agent-identity-mcp"
+}
