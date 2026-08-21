@@ -1,5 +1,7 @@
 # agent-identity-mcp
 
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/flovoice53-tech/agent-identity-mcp)
+
 MCP server that gives an AI agent a throwaway test identity — a real disposable email address and a real UK phone number — so it can sign up for something it's testing and read back the verification email/SMS itself, without a human in the loop.
 
 Bundles two existing services:
