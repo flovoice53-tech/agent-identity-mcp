@@ -38,6 +38,10 @@ Bundles two existing services:
 | `rent_test_phone_number` | Rent a real UK number for a service. Costs balance. |
 | `wait_for_test_sms` | Block until the SMS/OTP code arrives. |
 
+## Pairs well with: acp-sandbox
+
+Building or testing an AI shopping agent (ACP/agentic commerce)? [acp-sandbox](https://github.com/flovoice53-tech/acp-sandbox) is a hosted mock merchant your agent can complete a full test checkout against — no real store, no real money. Combined with this package, an agent gets a disposable email/phone for the buyer identity *and* a merchant to actually check out with, entirely test-side.
+
 ## License
 
 MIT
