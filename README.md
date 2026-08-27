@@ -42,6 +42,10 @@ Bundles two existing services:
 
 Building or testing an AI shopping agent (ACP/agentic commerce)? [acp-sandbox](https://github.com/flovoice53-tech/acp-sandbox) is a hosted mock merchant your agent can complete a full test checkout against — no real store, no real money. Combined with this package, an agent gets a disposable email/phone for the buyer identity *and* a merchant to actually check out with, entirely test-side.
 
+## Pairs well with: otp-watch
+
+Ship your own signup/verification flow? [otp-watch](https://otpwatch.flo-voice1.com) uses the same underlying real phone numbers and disposable mailboxes to answer a different question: is your OTP/verification SMS or email actually arriving, and how fast? Point your own cron/CI at it to catch a broken delivery pipeline before your users do.
+
 ## License
 
 MIT
