@@ -5,7 +5,7 @@
 MCP server that gives an AI agent a throwaway test identity — a real disposable email address and a real UK phone number — so it can sign up for something it's testing and read back the verification email/SMS itself, without a human in the loop.
 
 Bundles two existing services:
-- [receivemail.dev](https://receivemail.dev) for the email side.
+- [receivemail.dev](https://receivemail.dev) ([source](https://github.com/flovoice53-tech/receivemail-worker)) for the email side.
 - [sms-florin](https://flo-voice1.com) for the phone/SMS side.
 
 ## Status: published on npm and the official MCP registry
