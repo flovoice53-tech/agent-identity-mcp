@@ -4,21 +4,31 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { SmsFlorinClient, SmsFlorinError } from "sms-florin";
 import { z } from "zod";
 
-const smsFlorinApiKey = process.env.SMS_FLORIN_API_KEY;
-if (!smsFlorinApiKey) {
-  console.error(
-    "SMS_FLORIN_API_KEY is not set. Get one at https://flo-voice1.com/api-access and pass it as an env var.",
-  );
-  process.exit(1);
+// SMS_FLORIN_API_KEY is only needed for the phone-number tools
+// (list_services, rent_test_phone_number, wait_for_test_sms). The email
+// tools (create_test_email, get_test_email_messages) hit receivemail.dev's
+// public/self-serve mailbox creation and need no credential at all, so the
+// server must not refuse to start just because this env var is absent —
+// only the phone tools should fail, and only when actually called.
+let smsClient: SmsFlorinClient | undefined;
+function getSmsClient(): SmsFlorinClient {
+  const smsFlorinApiKey = process.env.SMS_FLORIN_API_KEY;
+  if (!smsFlorinApiKey) {
+    throw new ConfigError(
+      "SMS_FLORIN_API_KEY is not set. Get one at https://flo-voice1.com/api-access and pass it as an env var. (Not needed for create_test_email / get_test_email_messages.)",
+    );
+  }
+  if (!smsClient) {
+    smsClient = new SmsFlorinClient(smsFlorinApiKey, {
+      baseUrl: process.env.SMS_FLORIN_BASE_URL,
+    });
+  }
+  return smsClient;
 }
 
 // receivemail.dev's mailbox creation is public/self-serve — no token needed.
 // RECEIVEMAIL_API_TOKEN is optional, admin-only (Florin's own debugging).
 const receivemailToken = process.env.RECEIVEMAIL_API_TOKEN;
-
-const smsClient = new SmsFlorinClient(smsFlorinApiKey, {
-  baseUrl: process.env.SMS_FLORIN_BASE_URL,
-});
 
 const receivemailBaseUrl = process.env.RECEIVEMAIL_BASE_URL ?? "https://receivemail.dev";
 
@@ -28,6 +38,7 @@ const receivemailBaseUrl = process.env.RECEIVEMAIL_BASE_URL ?? "https://receivem
 const mailboxSecrets = new Map<string, string>();
 
 class ReceivemailError extends Error {}
+class ConfigError extends Error {}
 
 async function createTestMailbox(ttlMinutes: number) {
   const headers: Record<string, string> = { "content-type": "application/json" };
@@ -68,7 +79,7 @@ function text(value: unknown) {
 
 function errorText(error: unknown) {
   const message =
-    error instanceof SmsFlorinError || error instanceof ReceivemailError
+    error instanceof SmsFlorinError || error instanceof ReceivemailError || error instanceof ConfigError
       ? error.message
       : String(error);
   return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
@@ -129,7 +140,7 @@ server.registerTool(
   },
   async () => {
     try {
-      return text(await smsClient.listServices());
+      return text(await getSmsClient().listServices());
     } catch (error) {
       return errorText(error);
     }
@@ -154,7 +165,7 @@ server.registerTool(
   },
   async ({ serviceSlug, period }) => {
     try {
-      return text(await smsClient.rentNumber(serviceSlug, period));
+      return text(await getSmsClient().rentNumber(serviceSlug, period));
     } catch (error) {
       return errorText(error);
     }
@@ -175,7 +186,7 @@ server.registerTool(
   },
   async ({ rentalId, timeoutMs, intervalMs }) => {
     try {
-      return text(await smsClient.waitForSms(rentalId, { timeoutMs, intervalMs }));
+      return text(await getSmsClient().waitForSms(rentalId, { timeoutMs, intervalMs }));
     } catch (error) {
       return errorText(error);
     }
