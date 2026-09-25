@@ -4,6 +4,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { SmsFlorinClient, SmsFlorinError } from "sms-florin";
 import { z } from "zod";
 
+const VERSION = "0.1.3";
+const SIGNUP_URL = "https://flo-voice1.com/register";
+const API_KEY_URL = "https://flo-voice1.com/api-access";
+const TOP_UP_URL = "https://flo-voice1.com/topup";
+
 // SMS_FLORIN_API_KEY is only needed for the phone-number tools
 // (list_services, rent_test_phone_number, wait_for_test_sms). The email
 // tools (create_test_email, get_test_email_messages) hit receivemail.dev's
@@ -14,13 +19,23 @@ let smsClient: SmsFlorinClient | undefined;
 function getSmsClient(): SmsFlorinClient {
   const smsFlorinApiKey = process.env.SMS_FLORIN_API_KEY;
   if (!smsFlorinApiKey) {
+    // The first thing a new user sees from the phone tools, so it has to say
+    // how to get going, not just what's missing. Tell the agent to relay it:
+    // only the human can sign up and pay.
     throw new ConfigError(
-      "SMS_FLORIN_API_KEY is not set. Get one at https://flo-voice1.com/api-access and pass it as an env var. (Not needed for create_test_email / get_test_email_messages.)",
+      [
+        "The phone tools need an sms-florin API key (SMS_FLORIN_API_KEY), which isn't set. Please tell the user:",
+        `1. Create a free account at ${SIGNUP_URL}`,
+        `2. Add balance at ${TOP_UP_URL} — a number costs from 0.80 EUR, and a first top-up of 5 EUR or more gets 1 EUR extra.`,
+        `3. Create an API key at ${API_KEY_URL} and set it as SMS_FLORIN_API_KEY in this MCP server's config.`,
+        "The email tools (create_test_email, get_test_email_messages) are free and work without a key.",
+      ].join("\n"),
     );
   }
   if (!smsClient) {
     smsClient = new SmsFlorinClient(smsFlorinApiKey, {
       baseUrl: process.env.SMS_FLORIN_BASE_URL,
+      userAgent: `agent-identity-mcp/${VERSION}`,
     });
   }
   return smsClient;
@@ -77,15 +92,29 @@ function text(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
 }
 
+// The two sms-florin failures a caller can fix themselves get a next step
+// the agent can pass on; everything else is shown as the API returned it.
+function smsFlorinHint(error: SmsFlorinError): string | undefined {
+  if (error.code === "insufficient_balance") {
+    return `The account balance is too low for this rental. Ask the user to top up at ${error.topUpUrl ?? TOP_UP_URL}.`;
+  }
+  if (error.status === 401) {
+    return `The API key was rejected. Ask the user to check SMS_FLORIN_API_KEY or create a new one at ${API_KEY_URL}.`;
+  }
+  return undefined;
+}
+
 function errorText(error: unknown) {
-  const message =
+  let message =
     error instanceof SmsFlorinError || error instanceof ReceivemailError || error instanceof ConfigError
       ? error.message
       : String(error);
+  const hint = error instanceof SmsFlorinError ? smsFlorinHint(error) : undefined;
+  if (hint) message += `\n${hint}`;
   return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
 }
 
-const server = new McpServer({ name: "agent-identity-mcp", version: "0.1.0" });
+const server = new McpServer({ name: "agent-identity-mcp", version: VERSION });
 
 server.registerTool(
   "create_test_email",
