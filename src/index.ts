@@ -39,6 +39,7 @@ function getSmsClient(): SmsFlorinClient {
 // fine for short-TTL (max 60min) disposable mailboxes.
 const server = buildServer({
   getSmsClient,
+  siteBaseUrl: (process.env.SMS_FLORIN_BASE_URL ?? "https://flo-voice1.com").replace(/\/$/, ""),
   mailboxSecrets: new Map(),
   receivemailBaseUrl: process.env.RECEIVEMAIL_BASE_URL ?? "https://receivemail.dev",
   // receivemail.dev's mailbox creation is public/self-serve — no token needed.

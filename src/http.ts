@@ -217,6 +217,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
 
   const server = buildServer({
     getSmsClient: () => client,
+    siteBaseUrl: SMS_FLORIN_BASE_URL,
     mailboxSecrets: mailboxSecretsFor(keyHash),
     receivemailBaseUrl: RECEIVEMAIL_BASE_URL,
     maxWaitMs: MAX_WAIT_MS,
