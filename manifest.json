@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.2",
   "name": "agent-identity-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP server that gives an AI agent a disposable email address and a real UK phone number so it can test a signup/verification flow end to end.",
   "author": {
     "name": "sms-florin"
