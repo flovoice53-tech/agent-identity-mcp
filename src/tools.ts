@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SmsFlorinClient, SmsFlorinError } from "sms-florin";
 import { z } from "zod";
+import type { UsageStats } from "./usage.js";
 
 export const VERSION = "0.1.4";
 export const SIGNUP_URL = "https://flo-voice1.com/register";
@@ -35,6 +36,13 @@ export interface ToolDeps {
   maxWaitMs?: number;
   // Lower bound on wait_for_test_sms's poll interval.
   minIntervalMs?: number;
+  // Called once per successful tool call, for usage metering. Omitted ->
+  // no logging and get_usage_stats is not registered.
+  logUsage?: (toolName: string) => void;
+  // Returns the caller's own usage so far. Omitted -> get_usage_stats is
+  // not registered (keeps the tool list identical to pre-metering versions
+  // for any deployment that doesn't wire this in).
+  getUsageStats?: () => UsageStats;
 }
 
 async function createTestMailbox(deps: ToolDeps, ttlMinutes: number) {
@@ -143,7 +151,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     },
     async ({ ttlMinutes }) => {
       try {
-        return text(await createTestMailbox(deps, ttlMinutes));
+        const result = text(await createTestMailbox(deps, ttlMinutes));
+        deps.logUsage?.("create_test_email");
+        return result;
       } catch (error) {
         return errorText(error);
       }
@@ -161,7 +171,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     },
     async ({ address }) => {
       try {
-        return text(await getTestMailboxMessages(deps, address));
+        const result = text(await getTestMailboxMessages(deps, address));
+        deps.logUsage?.("get_test_email_messages");
+        return result;
       } catch (error) {
         return errorText(error);
       }
@@ -178,7 +190,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     },
     async () => {
       try {
-        return text(await deps.getSmsClient().listServices());
+        const result = text(await deps.getSmsClient().listServices());
+        deps.logUsage?.("list_services");
+        return result;
       } catch (error) {
         return errorText(error);
       }
@@ -203,7 +217,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     },
     async ({ serviceSlug, period }) => {
       try {
-        return text(await deps.getSmsClient().rentNumber(serviceSlug, period));
+        const result = text(await deps.getSmsClient().rentNumber(serviceSlug, period));
+        deps.logUsage?.("rent_test_phone_number");
+        return result;
       } catch (error) {
         return errorText(error);
       }
@@ -224,12 +240,14 @@ export function buildServer(deps: ToolDeps): McpServer {
     },
     async ({ rentalId, timeoutMs, intervalMs }) => {
       try {
-        return text(
+        const result = text(
           await deps.getSmsClient().waitForSms(rentalId, {
             timeoutMs: Math.min(timeoutMs, maxWaitMs),
             intervalMs: Math.max(intervalMs, minIntervalMs),
           }),
         );
+        deps.logUsage?.("wait_for_test_sms");
+        return result;
       } catch (error) {
         return errorText(error);
       }
@@ -246,7 +264,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     },
     async () => {
       try {
-        return text(await listEsimPlans(deps));
+        const result = text(await listEsimPlans(deps));
+        deps.logUsage?.("list_esim_plans");
+        return result;
       } catch (error) {
         return errorText(error);
       }
@@ -265,12 +285,28 @@ export function buildServer(deps: ToolDeps): McpServer {
     },
     async ({ slug }) => {
       try {
-        return text(await getEsimCheckoutLink(deps, slug));
+        const result = text(await getEsimCheckoutLink(deps, slug));
+        deps.logUsage?.("get_esim_checkout_link");
+        return result;
       } catch (error) {
         return errorText(error);
       }
     },
   );
+
+  if (deps.getUsageStats) {
+    server.registerTool(
+      "get_usage_stats",
+      {
+        title: "See your own tool-call usage",
+        description:
+          "See how many times each tool on this server has been called under your API key — today, the last 7 days, and the last 30 days. Useful to check consumption before it surprises you.",
+        inputSchema: {},
+      },
+      // Not logged itself: checking usage shouldn't count as usage.
+      () => text(deps.getUsageStats!()),
+    );
+  }
 
   return server;
 }

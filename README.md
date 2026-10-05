@@ -37,6 +37,9 @@ Bundles two existing services:
 | `list_services` | List services a phone number can be rented for. |
 | `rent_test_phone_number` | Rent a real UK number for a service. Costs balance. |
 | `wait_for_test_sms` | Block until the SMS/OTP code arrives. |
+| `list_esim_plans` | List travel eSIM data plans (data only, no SMS). |
+| `get_esim_checkout_link` | Get a Stripe checkout link for an eSIM plan, for the user to pay. |
+| `get_usage_stats` | See how many times each tool was called — today, last 7 and last 30 days. On the hosted server it's per API key and survives restarts; locally it counts since the MCP client started the server. Failed calls aren't counted. |
 
 ## Pairs well with: acp-sandbox
 

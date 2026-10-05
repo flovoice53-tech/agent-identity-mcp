@@ -2,6 +2,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SmsFlorinClient } from "sms-florin";
 import { API_KEY_URL, ConfigError, SIGNUP_URL, TOP_UP_URL, VERSION, buildServer } from "./tools.js";
+import { UsageStore } from "./usage.js";
 
 // SMS_FLORIN_API_KEY is only needed for the phone-number tools
 // (list_services, rent_test_phone_number, wait_for_test_sms). The email
@@ -35,9 +36,15 @@ function getSmsClient(): SmsFlorinClient {
   return smsClient;
 }
 
+// Counts for this process only: nothing is written to the user's disk, so
+// get_usage_stats here reports usage since the MCP client started us.
+const usage = new UsageStore();
+
 // One user per process, so one set of mailbox secrets for its lifetime —
 // fine for short-TTL (max 60min) disposable mailboxes.
 const server = buildServer({
+  logUsage: (toolName) => usage.record(toolName),
+  getUsageStats: () => usage.stats(),
   getSmsClient,
   siteBaseUrl: (process.env.SMS_FLORIN_BASE_URL ?? "https://flo-voice1.com").replace(/\/$/, ""),
   mailboxSecrets: new Map(),

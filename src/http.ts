@@ -13,9 +13,12 @@
 // - wait_for_test_sms is capped below nginx's proxy read timeout.
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SmsFlorinClient, SmsFlorinError } from "sms-florin";
 import { API_KEY_URL, type MailboxSecrets, RateLimitError, SIGNUP_URL, VERSION, buildServer } from "./tools.js";
+import { PersistentUsageStoreRegistry } from "./usage.js";
 
 const PORT = Number(process.env.PORT ?? 3902);
 // Calls the sms-florin app over loopback: the public hostname is behind
@@ -41,6 +44,13 @@ const KEY_CHECK_TTL_MS = 10 * 60 * 1000;
 const MAILBOX_SECRET_TTL_MS = 65 * 60 * 1000; // mailboxes live at most 60 minutes
 
 const MINUTE_MS = 60 * 1000;
+
+// Kept outside the app directory on purpose: deploys rsync --delete into
+// the app directory, which would wipe the counts on every release.
+const USAGE_FILE = process.env.USAGE_FILE ?? join(homedir(), ".agent-identity-mcp", "usage.json");
+const USAGE_SAVE_INTERVAL_MS = 60 * 1000;
+// Only hashed keys ever reach the file — never the API key itself.
+const usage = new PersistentUsageStoreRegistry(USAGE_FILE);
 
 function hashKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
@@ -115,8 +125,10 @@ function sweep() {
     }
     if (owner.secrets.size === 0) secretsByKey.delete(keyHash);
   }
+  usage.prune();
 }
 setInterval(sweep, MINUTE_MS).unref();
+setInterval(() => void usage.save(), USAGE_SAVE_INTERVAL_MS).unref();
 
 const inFlight = new Map<string, number>();
 
@@ -227,6 +239,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
         throw new RateLimitError("Too many test mailboxes created in the last minute for this API key, try again shortly.");
       }
     },
+    // Scoped to this key's hash, so a caller only ever sees its own counts.
+    logUsage: (toolName) => usage.record(keyHash, toolName),
+    getUsageStats: () => usage.for(keyHash).stats(),
   });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
@@ -253,6 +268,15 @@ const httpServer = createServer((req, res) => {
   });
 });
 
+// Flush pending counts on a PM2 restart/stop instead of losing up to a
+// minute of them.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    void usage.save().finally(() => process.exit(0));
+  });
+}
+
+await usage.load();
 httpServer.listen(PORT, "127.0.0.1", () => {
   console.log(`agent-identity-mcp hosted server listening on 127.0.0.1:${PORT}`);
 });
