@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SmsFlorinClient, SmsFlorinError } from "sms-florin";
 import { API_KEY_URL, type MailboxSecrets, RateLimitError, SIGNUP_URL, VERSION, buildServer } from "./tools.js";
-import { PersistentUsageStoreRegistry } from "./usage.js";
+import { PersistentUsageStoreRegistry } from "@sms-florin/mcpmeter";
 
 const PORT = Number(process.env.PORT ?? 3902);
 // Calls the sms-florin app over loopback: the public hostname is behind

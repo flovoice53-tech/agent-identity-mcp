@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@sms-florin/mcpmeter": "^0.1.0",
     "sms-florin": "^0.2.0",
     "zod": "^4.4.3"
   },

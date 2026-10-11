@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SmsFlorinClient, SmsFlorinError } from "sms-florin";
 import { z } from "zod";
-import type { UsageStats } from "./usage.js";
+import type { UsageStats } from "@sms-florin/mcpmeter";
 
 export const VERSION = "0.1.5";
 export const SIGNUP_URL = "https://flo-voice1.com/register";

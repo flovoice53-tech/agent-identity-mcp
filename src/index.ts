@@ -2,7 +2,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SmsFlorinClient } from "sms-florin";
 import { API_KEY_URL, ConfigError, SIGNUP_URL, TOP_UP_URL, VERSION, buildServer } from "./tools.js";
-import { UsageStore } from "./usage.js";
+import { UsageStore } from "@sms-florin/mcpmeter";
 
 // SMS_FLORIN_API_KEY is only needed for the phone-number tools
 // (list_services, rent_test_phone_number, wait_for_test_sms). The email
