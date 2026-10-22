@@ -240,7 +240,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
       }
     },
     // Scoped to this key's hash, so a caller only ever sees its own counts.
-    logUsage: (toolName) => usage.record(keyHash, toolName),
+    logUsage: (toolName, opts) => usage.record(keyHash, toolName, opts),
+    getClient: () => String(req.headers["user-agent"] ?? "").split(/[\s/]/)[0].slice(0, 40) || undefined,
     getUsageStats: () => usage.for(keyHash).stats(),
   });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

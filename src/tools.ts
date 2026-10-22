@@ -36,9 +36,11 @@ export interface ToolDeps {
   maxWaitMs?: number;
   // Lower bound on wait_for_test_sms's poll interval.
   minIntervalMs?: number;
-  // Called once per successful tool call, for usage metering. Omitted ->
+  // Called once per tool call (failures flagged with error: true), for usage metering. Omitted ->
   // no logging and get_usage_stats is not registered.
-  logUsage?: (toolName: string) => void;
+  logUsage?: (toolName: string, opts?: { client?: string; durationMs?: number; error?: boolean }) => void;
+  // Name of whoever is calling (MCP client name, user agent), if known.
+  getClient?: () => string | undefined;
   // Returns the caller's own usage so far. Omitted -> get_usage_stats is
   // not registered (keeps the tool list identical to pre-metering versions
   // for any deployment that doesn't wire this in).
@@ -132,6 +134,7 @@ export function buildServer(deps: ToolDeps): McpServer {
   const server = new McpServer({ name: "agent-identity-mcp", version: VERSION });
   const maxWaitMs = deps.maxWaitMs ?? Number.POSITIVE_INFINITY;
   const minIntervalMs = deps.minIntervalMs ?? 1_000;
+  const callInfo = () => ({ client: deps.getClient?.() });
 
   server.registerTool(
     "create_test_email",
@@ -150,11 +153,13 @@ export function buildServer(deps: ToolDeps): McpServer {
       },
     },
     async ({ ttlMinutes }) => {
+      const started = Date.now();
       try {
         const result = text(await createTestMailbox(deps, ttlMinutes));
-        deps.logUsage?.("create_test_email");
+        deps.logUsage?.("create_test_email", { ...callInfo(), durationMs: Date.now() - started });
         return result;
       } catch (error) {
+        deps.logUsage?.("create_test_email", { ...callInfo(), durationMs: Date.now() - started, error: true });
         return errorText(error);
       }
     },
@@ -170,11 +175,13 @@ export function buildServer(deps: ToolDeps): McpServer {
       },
     },
     async ({ address }) => {
+      const started = Date.now();
       try {
         const result = text(await getTestMailboxMessages(deps, address));
-        deps.logUsage?.("get_test_email_messages");
+        deps.logUsage?.("get_test_email_messages", { ...callInfo(), durationMs: Date.now() - started });
         return result;
       } catch (error) {
+        deps.logUsage?.("get_test_email_messages", { ...callInfo(), durationMs: Date.now() - started, error: true });
         return errorText(error);
       }
     },
@@ -189,11 +196,13 @@ export function buildServer(deps: ToolDeps): McpServer {
       inputSchema: {},
     },
     async () => {
+      const started = Date.now();
       try {
         const result = text(await deps.getSmsClient().listServices());
-        deps.logUsage?.("list_services");
+        deps.logUsage?.("list_services", { ...callInfo(), durationMs: Date.now() - started });
         return result;
       } catch (error) {
+        deps.logUsage?.("list_services", { ...callInfo(), durationMs: Date.now() - started, error: true });
         return errorText(error);
       }
     },
@@ -216,11 +225,13 @@ export function buildServer(deps: ToolDeps): McpServer {
       },
     },
     async ({ serviceSlug, period }) => {
+      const started = Date.now();
       try {
         const result = text(await deps.getSmsClient().rentNumber(serviceSlug, period));
-        deps.logUsage?.("rent_test_phone_number");
+        deps.logUsage?.("rent_test_phone_number", { ...callInfo(), durationMs: Date.now() - started });
         return result;
       } catch (error) {
+        deps.logUsage?.("rent_test_phone_number", { ...callInfo(), durationMs: Date.now() - started, error: true });
         return errorText(error);
       }
     },
@@ -239,6 +250,7 @@ export function buildServer(deps: ToolDeps): McpServer {
       },
     },
     async ({ rentalId, timeoutMs, intervalMs }) => {
+      const started = Date.now();
       try {
         const result = text(
           await deps.getSmsClient().waitForSms(rentalId, {
@@ -246,9 +258,10 @@ export function buildServer(deps: ToolDeps): McpServer {
             intervalMs: Math.max(intervalMs, minIntervalMs),
           }),
         );
-        deps.logUsage?.("wait_for_test_sms");
+        deps.logUsage?.("wait_for_test_sms", { ...callInfo(), durationMs: Date.now() - started });
         return result;
       } catch (error) {
+        deps.logUsage?.("wait_for_test_sms", { ...callInfo(), durationMs: Date.now() - started, error: true });
         return errorText(error);
       }
     },
@@ -263,11 +276,13 @@ export function buildServer(deps: ToolDeps): McpServer {
       inputSchema: {},
     },
     async () => {
+      const started = Date.now();
       try {
         const result = text(await listEsimPlans(deps));
-        deps.logUsage?.("list_esim_plans");
+        deps.logUsage?.("list_esim_plans", { ...callInfo(), durationMs: Date.now() - started });
         return result;
       } catch (error) {
+        deps.logUsage?.("list_esim_plans", { ...callInfo(), durationMs: Date.now() - started, error: true });
         return errorText(error);
       }
     },
@@ -284,11 +299,13 @@ export function buildServer(deps: ToolDeps): McpServer {
       },
     },
     async ({ slug }) => {
+      const started = Date.now();
       try {
         const result = text(await getEsimCheckoutLink(deps, slug));
-        deps.logUsage?.("get_esim_checkout_link");
+        deps.logUsage?.("get_esim_checkout_link", { ...callInfo(), durationMs: Date.now() - started });
         return result;
       } catch (error) {
+        deps.logUsage?.("get_esim_checkout_link", { ...callInfo(), durationMs: Date.now() - started, error: true });
         return errorText(error);
       }
     },

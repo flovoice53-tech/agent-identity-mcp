@@ -43,7 +43,8 @@ const usage = new UsageStore();
 // One user per process, so one set of mailbox secrets for its lifetime —
 // fine for short-TTL (max 60min) disposable mailboxes.
 const server = buildServer({
-  logUsage: (toolName) => usage.record(toolName),
+  logUsage: (toolName, opts) => usage.record(toolName, opts),
+  getClient: () => server.server.getClientVersion()?.name,
   getUsageStats: () => usage.stats(),
   getSmsClient,
   siteBaseUrl: (process.env.SMS_FLORIN_BASE_URL ?? "https://flo-voice1.com").replace(/\/$/, ""),
