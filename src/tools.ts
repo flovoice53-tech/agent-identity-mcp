@@ -3,7 +3,7 @@ import { SmsFlorinClient, SmsFlorinError } from "sms-florin";
 import { z } from "zod";
 import type { UsageStats } from "@sms-florin/mcpmeter";
 
-export const VERSION = "0.1.5";
+export const VERSION = "0.1.6";
 export const SIGNUP_URL = "https://flo-voice1.com/register";
 export const API_KEY_URL = "https://flo-voice1.com/api-access";
 export const TOP_UP_URL = "https://flo-voice1.com/topup";
