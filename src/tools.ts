@@ -140,8 +140,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     "create_test_email",
     {
       title: "Create a disposable test email address",
+      annotations: { title: "Create a disposable test email address", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       description:
-        "Get a fresh, real email address that can receive mail for a short time — use it to sign up for something you're testing, then call get_test_email_messages to read what arrives.",
+        "Get a fresh, real email address that can receive mail for a short time, for signing up to something being tested. Messages that arrive are read with get_test_email_messages.",
       inputSchema: {
         ttlMinutes: z
           .number()
@@ -169,6 +170,7 @@ export function buildServer(deps: ToolDeps): McpServer {
     "get_test_email_messages",
     {
       title: "Read messages for a test email address",
+      annotations: { title: "Read messages for a test email address", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       description: "Get the messages received so far on an address created with create_test_email.",
       inputSchema: {
         address: z.string().describe("The address returned by create_test_email."),
@@ -191,6 +193,7 @@ export function buildServer(deps: ToolDeps): McpServer {
     "list_services",
     {
       title: "List phone-verification services",
+      annotations: { title: "List phone-verification services", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description:
         "List the services a real UK phone number can be rented for (WhatsApp, Telegram, Google, Discord, etc.), with prices.",
       inputSchema: {},
@@ -212,8 +215,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     "rent_test_phone_number",
     {
       title: "Rent a real test phone number",
+      annotations: { title: "Rent a real test phone number", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       description:
-        "Rent a real UK phone number for a given service so it can receive an SMS/OTP verification code. Debits the account balance. Returns a rentalId to check with wait_for_test_sms.",
+        "Rent a real UK phone number for a given service so it can receive an SMS/OTP verification code. Debits the account balance. Returns a rentalId.",
       inputSchema: {
         serviceSlug: z
           .string()
@@ -241,8 +245,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     "wait_for_test_sms",
     {
       title: "Wait for the SMS/OTP code",
+      annotations: { title: "Wait for the SMS/OTP code", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       description:
-        "Block until the first SMS/OTP code arrives on a phone rental, or time out. If it times out, call it again — the rental keeps receiving until it expires.",
+        "Block until the first SMS/OTP code arrives on a phone rental, or time out. A rental keeps receiving until it expires, so a timeout doesn't end it.",
       inputSchema: {
         rentalId: z.number().int().describe("The rentalId returned by rent_test_phone_number."),
         timeoutMs: z.number().int().positive().default(120_000).describe("Max time to wait, in ms."),
@@ -271,8 +276,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     "list_esim_plans",
     {
       title: "List travel eSIM data plans",
+      annotations: { title: "List travel eSIM data plans", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description:
-        "List the travel eSIM data plans on sale (country, data amount, duration in days, price in USD cents). Data only — an eSIM has no phone number and cannot receive SMS codes; use rent_test_phone_number for that.",
+        "List the travel eSIM data plans on sale (country, data amount, duration in days, price in USD cents). Data only: an eSIM has no phone number and cannot receive SMS codes.",
       inputSchema: {},
     },
     async () => {
@@ -292,8 +298,9 @@ export function buildServer(deps: ToolDeps): McpServer {
     "get_esim_checkout_link",
     {
       title: "Get a checkout link for an eSIM plan",
+      annotations: { title: "Get a checkout link for an eSIM plan", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       description:
-        "Get a Stripe checkout link for one eSIM plan, to hand to the user. It does not buy anything: the user pays on the Stripe page themselves and receives the eSIM by email.",
+        "Get a Stripe checkout link for one eSIM plan. It does not buy anything: the user pays on the Stripe page and receives the eSIM by email.",
       inputSchema: {
         slug: z.string().max(60).describe('Plan slug from list_esim_plans, e.g. "uk-1gb-7d".'),
       },
@@ -316,8 +323,9 @@ export function buildServer(deps: ToolDeps): McpServer {
       "get_usage_stats",
       {
         title: "See your own tool-call usage",
+        annotations: { title: "See your own tool-call usage", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
-          "See how many times each tool on this server has been called under your API key — today, the last 7 days, and the last 30 days. Useful to check consumption before it surprises you.",
+          "See how many times each tool on this server has been called with your account's credentials — today, the last 7 days, and the last 30 days.",
         inputSchema: {},
       },
       // Not logged itself: checking usage shouldn't count as usage.
