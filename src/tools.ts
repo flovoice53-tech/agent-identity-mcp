@@ -107,6 +107,10 @@ async function getEsimCheckoutLink(deps: ToolDeps, slug: string) {
   };
 }
 
+function formatEuroCents(cents: number | null): string | null {
+  return cents === null ? null : `${(cents / 100).toFixed(2)} EUR`;
+}
+
 function text(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
 }
@@ -195,13 +199,20 @@ export function buildServer(deps: ToolDeps): McpServer {
       title: "List phone-verification services",
       annotations: { title: "List phone-verification services", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description:
-        "List the services a real UK phone number can be rented for (WhatsApp, Telegram, Google, Discord, etc.), with prices.",
+        "List the services a real UK phone number can be rented for (WhatsApp, Telegram, Google, Discord, etc.), with prices in EUR.",
       inputSchema: {},
     },
     async () => {
       const started = Date.now();
       try {
-        const result = text(await deps.getSmsClient().listServices());
+        // sms-florin prices are euro cents; spell the currency out so an
+        // agent doesn't have to guess it.
+        const services = (await deps.getSmsClient().listServices()).map((service) => ({
+          ...service,
+          price: formatEuroCents(service.basePriceCents),
+          monthlyPrice: formatEuroCents(service.monthlyPriceCents),
+        }));
+        const result = text(services);
         deps.logUsage?.("list_services", { ...callInfo(), durationMs: Date.now() - started });
         return result;
       } catch (error) {
