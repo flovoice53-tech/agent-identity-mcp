@@ -1,15 +1,15 @@
 // Hosted mode: the same tools as the npm package, served over MCP's
-// Streamable HTTP transport, so an agent can connect with just a URL and an
-// API key — no local Node or npx. Runs on the sms-florin box behind nginx
+// Streamable HTTP transport, so an agent can connect with just a URL and
+// either an API key or an OAuth sign-in — no local Node or npx. Runs on the sms-florin box behind nginx
 // (api.flo-voice1.com/mcp), not as part of the npm package's entry point.
 //
 // Unlike the local server, this one is shared by every caller, which
 // changes three things:
-// - Every tool needs a valid sms-florin API key, including the free email
-//   ones. All calls to receivemail.dev leave from this box's single IP, so
+// - Every tool needs a valid sms-florin API key or OAuth access token,
+//   including the free email ones. All calls to receivemail.dev leave from this box's single IP, so
 //   without a per-key limit here one caller could spend receivemail's
 //   per-IP budget for everyone.
-// - Mailbox secrets are kept per API key, never in one shared map.
+// - Mailbox secrets are kept per caller, never in one shared map.
 // - wait_for_test_sms is capped below nginx's proxy read timeout.
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -25,6 +25,13 @@ const PORT = Number(process.env.PORT ?? 3902);
 // Cloudflare, whose bot protection challenges non-browser clients.
 const SMS_FLORIN_BASE_URL = process.env.SMS_FLORIN_BASE_URL ?? "http://127.0.0.1:3000";
 const RECEIVEMAIL_BASE_URL = process.env.RECEIVEMAIL_BASE_URL ?? "https://receivemail.dev";
+// This server is an OAuth protected resource (RFC 9728); sms-florin is the
+// authorization server, with its endpoints on the same api host.
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? "https://api.flo-voice1.com";
+const RESOURCE_URL = `${PUBLIC_BASE_URL}/mcp`;
+const RESOURCE_METADATA_URL = `${PUBLIC_BASE_URL}/.well-known/oauth-protected-resource`;
+// sms-florin's OAuth access tokens; anything else is treated as an API key.
+const OAUTH_TOKEN_PREFIX = "sfo_at_";
 
 const MAX_BODY_BYTES = 256 * 1024;
 // nginx allows 150s on this route; leave headroom for the response.
@@ -41,6 +48,9 @@ const MIN_POLL_INTERVAL_MS = 3_000;
 // shares this box's IP.
 const MAILBOXES_PER_KEY_PER_MINUTE = 5;
 const KEY_CHECK_TTL_MS = 10 * 60 * 1000;
+// OAuth tokens can be revoked by the user, so they're re-checked sooner,
+// and never trusted past their own expiry.
+const OAUTH_CHECK_TTL_MS = 60 * 1000;
 const MAILBOX_SECRET_TTL_MS = 65 * 60 * 1000; // mailboxes live at most 60 minutes
 
 const MINUTE_MS = 60 * 1000;
@@ -72,20 +82,43 @@ function allow(bucket: string, max: number): boolean {
   return true;
 }
 
-// A key is checked against sms-florin once, then trusted for a while —
-// otherwise every tool call would cost an extra upstream request.
-const verifiedKeys = new Map<string, number>();
-async function isValidKey(client: SmsFlorinClient, keyHash: string): Promise<boolean> {
-  const verifiedAt = verifiedKeys.get(keyHash);
-  if (verifiedAt !== undefined && Date.now() - verifiedAt < KEY_CHECK_TTL_MS) return true;
+// A credential is checked against sms-florin once, then trusted for a
+// while — otherwise every tool call would cost an extra upstream request.
+//
+// Returns the caller's identity: the bucket that rate limits, mailbox
+// secrets and usage counts are kept under. For an API key that's the key's
+// hash, as before. An OAuth access token is replaced every hour by a
+// refresh, so it maps to its account instead, and the state survives.
+const verifiedCredentials = new Map<string, { identity: string; validUntil: number }>();
+async function verifyCredential(token: string, client: SmsFlorinClient): Promise<string | null> {
+  const tokenHash = hashKey(token);
+  const cached = verifiedCredentials.get(tokenHash);
+  if (cached && Date.now() < cached.validUntil) return cached.identity;
+
+  if (token.startsWith(OAUTH_TOKEN_PREFIX)) {
+    const res = await fetch(`${SMS_FLORIN_BASE_URL}/api/oauth/token-info`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`token-info answered ${res.status}`);
+    const info = (await res.json()) as { sub?: unknown; exp?: unknown };
+    if (typeof info.sub !== "string" || typeof info.exp !== "number") throw new Error("token-info: unexpected response");
+    const identity = hashKey(`oauth-user:${info.sub}`);
+    verifiedCredentials.set(tokenHash, {
+      identity,
+      validUntil: Math.min(info.exp * 1000, Date.now() + OAUTH_CHECK_TTL_MS),
+    });
+    return identity;
+  }
+
   try {
     await client.listServices();
   } catch (error) {
-    if (error instanceof SmsFlorinError && error.status === 401) return false;
+    if (error instanceof SmsFlorinError && error.status === 401) return null;
     throw error;
   }
-  verifiedKeys.set(keyHash, Date.now());
-  return true;
+  verifiedCredentials.set(tokenHash, { identity: tokenHash, validUntil: Date.now() + KEY_CHECK_TTL_MS });
+  return tokenHash;
 }
 
 // Mailbox secrets per API key hash. Each entry remembers when it was created
@@ -113,8 +146,8 @@ function sweep() {
   for (const [bucket, entry] of counters) {
     if (now - entry.windowStart >= MINUTE_MS) counters.delete(bucket);
   }
-  for (const [keyHash, verifiedAt] of verifiedKeys) {
-    if (now - verifiedAt >= KEY_CHECK_TTL_MS) verifiedKeys.delete(keyHash);
+  for (const [tokenHash, entry] of verifiedCredentials) {
+    if (now >= entry.validUntil) verifiedCredentials.delete(tokenHash);
   }
   for (const [keyHash, owner] of secretsByKey) {
     for (const [address, createdAt] of owner.createdAt) {
@@ -144,8 +177,41 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
 }
 
 // JSON-RPC shaped so MCP clients surface the message instead of a bare status.
-function sendRpcError(res: ServerResponse, status: number, message: string) {
-  sendJson(res, status, { jsonrpc: "2.0", error: { code: -32001, message }, id: null });
+function sendRpcError(res: ServerResponse, status: number, message: string, headers: Record<string, string> = {}) {
+  res
+    .writeHead(status, { "content-type": "application/json", ...headers })
+    .end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message }, id: null }));
+}
+
+// The WWW-Authenticate header is how an MCP client finds out it can sign
+// in: it points at the protected-resource metadata, which names the
+// authorization server.
+function sendUnauthorized(res: ServerResponse, message: string, invalidToken: boolean) {
+  const challenge = `Bearer resource_metadata="${RESOURCE_METADATA_URL}"${invalidToken ? ', error="invalid_token"' : ""}`;
+  sendRpcError(res, 401, message, { "www-authenticate": challenge });
+}
+
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, OPTIONS",
+  "access-control-allow-headers": "Authorization, Content-Type, MCP-Protocol-Version",
+};
+
+function sendResourceMetadata(req: IncomingMessage, res: ServerResponse) {
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, CORS_HEADERS).end();
+    return;
+  }
+  res.writeHead(200, { "content-type": "application/json", "cache-control": "public, max-age=3600", ...CORS_HEADERS }).end(
+    JSON.stringify({
+      resource: RESOURCE_URL,
+      authorization_servers: [PUBLIC_BASE_URL],
+      scopes_supported: ["mcp"],
+      bearer_methods_supported: ["header"],
+      resource_name: "agent-identity-mcp",
+      resource_documentation: API_KEY_URL,
+    }),
+  );
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -167,7 +233,7 @@ function bearerToken(req: IncomingMessage): string | undefined {
 }
 
 const NO_KEY_MESSAGE = [
-  "This hosted server needs an sms-florin API key, sent as \"Authorization: Bearer <key>\". Please tell the user:",
+  "This hosted server needs the user to sign in (OAuth) or an sms-florin API key, sent as \"Authorization: Bearer <key>\". To use a key, please tell the user:",
   `1. Create a free account at ${SIGNUP_URL}`,
   `2. Create an API key at ${API_KEY_URL} and add it to this MCP server's connection settings.`,
   "The email tools are free with any valid key; renting a phone number needs account balance.",
@@ -185,8 +251,25 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
     return sendRpcError(res, 429, "Rate limited — too many requests, try again in a minute.");
   }
   const apiKey = bearerToken(req);
-  if (!apiKey) return sendRpcError(res, 401, NO_KEY_MESSAGE);
-  const keyHash = hashKey(apiKey);
+  if (!apiKey) return sendUnauthorized(res, NO_KEY_MESSAGE, false);
+
+  const client = new SmsFlorinClient(apiKey, {
+    baseUrl: SMS_FLORIN_BASE_URL,
+    userAgent: `agent-identity-mcp-hosted/${VERSION}`,
+  });
+  let keyHash: string | null;
+  try {
+    keyHash = await verifyCredential(apiKey, client);
+  } catch (error) {
+    console.error("credential check failed:", error);
+    return sendRpcError(res, 503, "Could not verify the credentials right now, try again shortly.");
+  }
+  if (!keyHash) {
+    const message = apiKey.startsWith(OAUTH_TOKEN_PREFIX)
+      ? "The access token is expired or revoked. Sign in again."
+      : `The API key was rejected. Create a new one at ${API_KEY_URL}.`;
+    return sendUnauthorized(res, message, true);
+  }
   if (!allow(`req:${keyHash}`, REQUESTS_PER_KEY_PER_MINUTE)) {
     return sendRpcError(res, 429, "Rate limited — too many requests for this API key, try again in a minute.");
   }
@@ -206,19 +289,6 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
   // "close" fires once the response is done or the client goes away,
   // whichever path this request takes below.
   res.on("close", release);
-
-  const client = new SmsFlorinClient(apiKey, {
-    baseUrl: SMS_FLORIN_BASE_URL,
-    userAgent: `agent-identity-mcp-hosted/${VERSION}`,
-  });
-  try {
-    if (!(await isValidKey(client, keyHash))) {
-      return sendRpcError(res, 401, `The API key was rejected. Create a new one at ${API_KEY_URL}.`);
-    }
-  } catch (error) {
-    console.error("key check failed:", error);
-    return sendRpcError(res, 503, "Could not verify the API key right now, try again shortly.");
-  }
 
   let body: unknown;
   try {
@@ -260,6 +330,8 @@ const httpServer = createServer((req, res) => {
       ? handleMcp(req, res)
       : path === "/mcp/health"
         ? Promise.resolve(sendJson(res, 200, { ok: true, version: VERSION }))
+        : path === "/.well-known/oauth-protected-resource" || path === "/.well-known/oauth-protected-resource/mcp"
+          ? Promise.resolve(sendResourceMetadata(req, res))
         : Promise.resolve(sendJson(res, 404, { error: "not found" }));
   handler.catch((error) => {
     // Never echo the error: it can carry upstream detail. Log it here instead.
