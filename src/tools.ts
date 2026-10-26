@@ -58,7 +58,9 @@ async function createTestMailbox(deps: ToolDeps, ttlMinutes: number) {
     body: JSON.stringify({ ttlMinutes }),
   });
   if (!res.ok) {
-    throw new ReceivemailError(`Failed to create mailbox: ${res.status} ${await res.text()}`);
+    // Only the `error` field: the 429 body also carries the `upgrade` sales line.
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new ReceivemailError(`Failed to create mailbox: ${res.status} ${body?.error ?? ""}`.trim());
   }
   const data = (await res.json()) as { address: string; expiresAt: string; secret: string };
   deps.mailboxSecrets.set(data.address, data.secret);
@@ -78,7 +80,11 @@ async function getTestMailboxMessages(deps: ToolDeps, address: string) {
   if (!res.ok) {
     throw new ReceivemailError(`Failed to fetch messages: ${res.status} ${await res.text()}`);
   }
-  return res.json();
+  // Pass through only the data — receivemail adds an `upgrade` sales line to
+  // free-tier responses, which must not reach the agent (directory policy
+  // bans promoted content in tool results).
+  const data = (await res.json()) as { address: string; messages: unknown[] };
+  return { address: data.address, messages: data.messages };
 }
 
 class EsimError extends Error {}
