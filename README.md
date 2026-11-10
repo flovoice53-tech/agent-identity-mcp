@@ -8,6 +8,8 @@ Bundles two existing services:
 - [receivemail.dev](https://receivemail.dev) ([source](https://github.com/flovoice53-tech/receivemail-worker)) for the email side.
 - [sms-florin](https://flo-voice1.com) for the phone/SMS side.
 
+See it in use: [Signup Sandbox](https://sandbox.flo-voice1.com) is an AI agent that tests a signup flow end to end with a disposable inbox like this one and reports where it breaks (live demo).
+
 ## Status: published on npm and the official MCP registry
 
 `create_test_email` no longer needs any receivemail.dev credential — mailbox creation is public/self-serve (rate-limited: 20/min per IP, 5,000/day total). The only credential needed is your own `SMS_FLORIN_API_KEY`, for the phone-number tools.
